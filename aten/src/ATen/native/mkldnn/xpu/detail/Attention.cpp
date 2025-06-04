@@ -170,8 +170,6 @@ partition create_sdpa_graph_partition(
     data_type dtype,
     const SDPALogicalParams& params) {
   // graph building and partitioning
-  // currently, we assume that Q and K have same sequence length
-
   size_t lt_id = static_cast<size_t>(SDPALogicalParams::TensorID::end);
   size_t op_id = 0;
 
@@ -391,7 +389,7 @@ void gpu_float_sdpa(
   if (!output.defined()) {
     // allocate output tensor with layout matched to query
     std::vector<int64_t> output_shape = {
-        batch_size, num_head, seq_len_q, head_dim_v};
+        batch_size, num_head_q, seq_len_q, head_dim_v};
     alloc_with_matching_layout(query, output, output_shape);
   }
 

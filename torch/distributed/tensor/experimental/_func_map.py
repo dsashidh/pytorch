@@ -23,12 +23,6 @@ InputPlacements = Optional[Sequence[PlacementType]]
 OutputPlacements = Union[PlacementType, Sequence[PlacementType]]
 
 
-def dtensor_grad_hook(tensor, device_mesh, spec):
-    print(f"[{torch.distributed.get_rank()}] updating grad tensor to: {spec}")
-    tensor = tensor.redistribute(device_mesh, spec)
-    return tensor
-
-
 def local_map(
     func: Callable,
     out_placements: OutputPlacements,

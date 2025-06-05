@@ -239,6 +239,8 @@ def generate_libtorch_matrix(
             arches += ROCM_ARCHES
         elif os == "windows":
             arches += CUDA_ARCHES
+            if "12.9" in arches:
+                arches.remove("12.9")
     if libtorch_variants is None:
         libtorch_variants = [
             "shared-with-deps",
@@ -304,6 +306,9 @@ def generate_wheels_matrix(
             arches += CUDA_ARCHES + ROCM_ARCHES + XPU_ARCHES
         elif os == "windows":
             arches += CUDA_ARCHES + XPU_ARCHES
+            # skip CUDA 12.9 builds on Windows
+            if "12.9" in arches:
+                arches.remove("12.9")
         elif os == "linux-aarch64":
             # Separate new if as the CPU type is different and
             # uses different build/test scripts
@@ -342,7 +347,7 @@ def generate_wheels_matrix(
             # cuda linux wheels require PYTORCH_EXTRA_INSTALL_REQUIREMENTS to install
 
             if (
-                arch_version in ["12.8", "12.6", "11.8"]
+                arch_version in ["12.9", "12.8", "12.6", "11.8"]
                 and os == "linux"
                 or arch_version in CUDA_AARCH64_ARCHES
             ):
@@ -431,6 +436,7 @@ def generate_wheels_matrix(
     return ret
 
 
+validate_nccl_dep_consistency("12.9")
 validate_nccl_dep_consistency("12.8")
 validate_nccl_dep_consistency("12.6")
 validate_nccl_dep_consistency("11.8")

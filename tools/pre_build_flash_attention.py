@@ -17,7 +17,7 @@ def main() -> None:
             print(f"Compiling {output} with command: {command['command']}")
             os.makedirs(os.path.dirname(output), exist_ok=True)
             res = subprocess.run(
-                command["command"]
+                command["command"].split(),
             )
             if res.returncode != 0:
                 print(f"Failed to compile {output}, command: {command['command']}")

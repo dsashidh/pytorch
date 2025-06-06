@@ -87,11 +87,12 @@ def upload_to_s3_artifacts(failed: bool) -> None:
         Bucket="gha-artifacts",
         Key=f"workflows_failing_pending_upload/{workflow_id}.txt",
     )
-
+    print(f"hello {job_id} {failed}")
     if job_id and failed:
         logs = concated_logs()
         # Put logs into bucket so log classifier can access them. We cannot get
         # the actual GH logs so this will have to be a proxy.
+        print(f"Uploading logs for {job_id} to S3")
         get_s3_resource().put_object(
             Body=gzip.compress(logs.encode("utf-8")),
             Bucket="gha-artifacts",

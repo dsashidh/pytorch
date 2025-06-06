@@ -324,10 +324,12 @@ class TestLocalMap(DTensorTestBase):
         with self.assertRaisesRegex(ValueError, "set redistribute_inputs=True"):
             Y_dt = local_mm_allreduce_forward(device_mesh, X_dt, W_dt)
 
+    # check for `in_grad_placements` handling
     @with_comms
-    def test_local_map_with_grad_placement_modifiable(self):
+    def test_local_map_with_grad_placement_correctness(self):
         """
-        Test that input gradient changes with `in_grad_placements`.
+        Test the gradient result is correct when we specify the right
+        `in_grad_placements`.
         """
         device_mesh = init_device_mesh(
             device_type=self.device_type, mesh_shape=(self.world_size,)
@@ -337,18 +339,15 @@ class TestLocalMap(DTensorTestBase):
         X = torch.randn(2, 4, device=self.device_type, requires_grad=True)
         W = torch.randn(4, 2, device=self.device_type, requires_grad=True)
         Y = torch.mm(X, W)
-
+        loss = Y.sum()
+        loss.backward()
         # TODO(zpcore): Update the test to use parameterized.parameterized once
         # it is compatible with @with_comms.
         in_grad_placements_options = [(col_wise, row_wise), (row_wise, col_wise)]
         for in_grad_placements in in_grad_placements_options:
             X_dt = distribute_tensor(X, device_mesh, row_wise)
             W_dt = distribute_tensor(W, device_mesh, col_wise)
-            # TODO(zpcore): Currently `in_placements`` argument can be specified
-            # as (row_wise, col_wise). This is not a realistic case because we
-            # will shard both dim of Y_dt into the same device mesh axis. The
-            # final result will silently lose part of data. Fix the output or
-            # raise an error in this case.
+            in_grad_placements = (col_wise, row_wise)
             local_mm_forward = local_map(
                 mm_forward,
                 out_placements=[Partial()],
@@ -366,47 +365,24 @@ class TestLocalMap(DTensorTestBase):
 
             self.assertEqual(X_dt.grad.placements, in_grad_placements[0])
             self.assertEqual(W_dt.grad.placements, in_grad_placements[1])
-
-    @with_comms
-    def test_local_map_with_grad_placement_correctness(self):
-        """
-        Test the gradient result is correct when we specify the right
-        `in_grad_placements`.
-        """
-        device_mesh = init_device_mesh(
-            device_type=self.device_type, mesh_shape=(self.world_size,)
-        )
-        torch.manual_seed(12)
-
-        X = torch.randn(2, 4, device=self.device_type, requires_grad=True)
-        W = torch.randn(4, 2, device=self.device_type, requires_grad=True)
-        Y = torch.mm(X, W)
-        loss = Y.sum()
-        loss.backward()
-
-        X_dt = distribute_tensor(X, device_mesh, row_wise)
-        W_dt = distribute_tensor(W, device_mesh, col_wise)
-
-        in_grad_placements = (row_wise, col_wise)
-        local_mm_forward = local_map(
-            mm_forward,
-            out_placements=[Partial()],
-            in_placements=(col_wise, row_wise),
-            in_grad_placements=in_grad_placements,
-            device_mesh=device_mesh,
-            redistribute_inputs=True,
-        )
-        Y_dt = local_mm_forward(X_dt, W_dt)
-        self.assertEqual(Y_dt.full_tensor(), Y)
-
-        loss = Y_dt.sum()
-        loss.backward()
-        self.assertIsInstance(W_dt.grad, DTensor)
-
-        self.assertEqual(X_dt.grad.placements, in_grad_placements[0])
-        self.assertEqual(W_dt.grad.placements, in_grad_placements[1])
-        self.assertEqual(X.grad, X_dt.grad.full_tensor())
-        self.assertEqual(W.grad, W_dt.grad.full_tensor())
+            if in_grad_placements == (X_dt.placements, Y_dt.placements):
+                self.assertEqual(X_dt.grad.full_tensor(), X.grad)
+                self.assertEqual(W_dt.grad.full_tensor(), W.grad)
+            else:
+                # intentionally set the mismatched `in_grad_placements` with the
+                # `X_dt`` and `W_dt`
+                self.assertNotEqual(X.grad, X_dt.grad.full_tensor())
+                self.assertNotEqual(W.grad, W_dt.grad.full_tensor())
+                # convert grad to the correct placements
+                with torch.no_grad():
+                    X_dt_grad_corrected = X_dt.grad.from_local(
+                        X_dt.grad.to_local(), device_mesh, placements=X_dt.placements
+                    )
+                    self.assertEqual(X.grad, X_dt_grad_corrected.full_tensor())
+                    W_dt_grad_corrected = W_dt.grad.from_local(
+                        W_dt.grad.to_local(), device_mesh, placements=W_dt.placements
+                    )
+                    self.assertEqual(W.grad, W_dt_grad_corrected.full_tensor())
 
 
 if __name__ == "__main__":

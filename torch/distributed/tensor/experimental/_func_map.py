@@ -19,8 +19,8 @@ except ImportError:
 __all__ = ["local_map"]
 
 PlacementType = Optional[Sequence[Placement]]
-InputPlacements = Optional[Sequence[PlacementType]]
-OutputPlacements = Union[PlacementType, Sequence[PlacementType]]
+InputPlacements = Optional[tuple[PlacementType, ...]]
+OutputPlacements = Union[PlacementType, tuple[PlacementType, ...]]
 
 
 def local_map(

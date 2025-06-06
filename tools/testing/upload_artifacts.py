@@ -35,9 +35,11 @@ def concated_logs() -> str:
     """Concatenate all the logs in the test-reports directory into a single string."""
     logs = []
     for log_file in glob.glob(f"{REPO_ROOT}/test/test-reports/**/*.log", recursive=True):
+        logs.append(f"=== {log_file} ===")
         with open(log_file, "r") as f:
-            # For every line, prefix with fake timestamp for log classifier 2020-01-01T00:00:00.0000000Z
+            # For every line, prefix with fake timestamp for log classifier
             for line in f:
+                line = line.rstrip("\n")  # Remove any trailing newline
                 logs.append(f"2020-01-01T00:00:00.0000000Z {line}")
     return "\n".join(logs)
 

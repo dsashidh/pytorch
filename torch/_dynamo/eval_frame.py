@@ -48,6 +48,10 @@ from unittest.mock import patch
 import sympy
 
 import torch
+from torch._subclasses.functional_tensor import FunctionalTensorMode
+from torch._functorch._aot_autograd.functional_utils import (
+    to_fun
+)
 import torch.fx
 import torch.utils._pytree as pytree
 import torch.utils.checkpoint
@@ -1178,42 +1182,46 @@ class FlattenInputOutputSignature(torch.fx.Transformer):
         matched_input_elements_positions: list[int],
         flat_results: list[Any],
         matched_output_elements_positions: list[int],
-        example_fake_inputs: list[torch.Tensor],
+        example_func_fake_inputs: list[torch.Tensor],
         flat_args_dynamic_dims: list[set[int]],
         fake_mode: Optional[fake_tensor.FakeTensorMode] = None,
+        func_mode: Optional[FunctionalTensorMode] = None,
     ) -> None:
         super().__init__(m)
 
         assert len(flat_args_dynamic_dims) == len(flat_args)
-        matched_input_elements_to_fake = {
-            val: example_fake_inputs[ix]
+        matched_input_elements_to_func_fake = {
+            val: example_func_fake_inputs[ix]
             for ix, val in enumerate(matched_input_elements_positions)
         }
 
         self.new_args = []
         for i in range(0, len(flat_args)):
             arg = super().placeholder(f"arg{i}", (), {})
-            if i in matched_input_elements_to_fake:
-                arg.node.meta["val"] = matched_input_elements_to_fake[i]
+            if i in matched_input_elements_to_func_fake:
+                arg.node.meta["val"] = matched_input_elements_to_func_fake[i]
             else:
-                # Fill node.mata["val"] with faketensor from the input,
+                # Fill node.mata["val"] with functional(faketensor) from the input,
                 # if it's not found in matched_input_elements_positions
                 if fake_mode is not None and isinstance(flat_args[i], torch.Tensor):
-                    # TODO(zhxchen17) Also preserve all the user constraints here.
-                    arg.node.meta["val"] = fake_mode.from_tensor(
-                        flat_args[i],
-                        symbolic_context=StatelessSymbolicContext(
-                            dynamic_sizes=[
-                                (
-                                    DimDynamic.DYNAMIC
-                                    if d in flat_args_dynamic_dims[i]
-                                    else DimDynamic.STATIC
-                                )
-                                for d in range(len(flat_args[i].shape))
-                            ],
-                            constraint_sizes=[None] * len(flat_args[i].shape),
-                        ),
-                    )
+                    if func_mode is None:
+                        func_mode = FunctionalTensorMode()
+                    with func_mode:
+                        # TODO(zhxchen17) Also preserve all the user constraints here.
+                        arg.node.meta["val"] = to_fun(fake_mode.from_tensor(
+                            flat_args[i],
+                            symbolic_context=StatelessSymbolicContext(
+                                dynamic_sizes=[
+                                    (
+                                        DimDynamic.DYNAMIC
+                                        if d in flat_args_dynamic_dims[i]
+                                        else DimDynamic.STATIC
+                                    )
+                                    for d in range(len(flat_args[i].shape))
+                                ],
+                                constraint_sizes=[None] * len(flat_args[i].shape),
+                            ),
+                        ))
                 elif isinstance(flat_args[i], _IntWrapper):
                     arg.node.meta["val"] = flat_args[i].val
                 else:
@@ -1343,7 +1351,7 @@ def rewrite_signature(
     fake_mode,
     flat_args,
     in_spec,
-    example_fake_inputs,
+    example_func_fake_inputs,
     graph_captured_input,
     graph_captured_output,
     dynamo_traced_result,
@@ -1439,7 +1447,7 @@ def rewrite_signature(
         matched_input_elements_positions,
         flat_results_traced,
         matched_output_elements_positions,
-        example_fake_inputs,
+        example_func_fake_inputs,
         flat_args_dynamic_dims,
         fake_mode,
     ).transform()
@@ -1833,7 +1841,9 @@ def export(
                     )
         if constraint_violation_error:
             raise constraint_violation_error
-
+        func_mode = FunctionalTensorMode(
+            pre_dispatch=pre_dispatch, export=True
+        )
         if graph is None:
             assert same_signature, (
                 "Failed to produce a graph during tracing as no tensor operations were found and same_signature is False."
@@ -1849,6 +1859,7 @@ def export(
             fake_mode = torch._subclasses.FakeTensorMode(
                 shape_env=ShapeEnv(), export=True
             )
+
             if out_guards is None:
                 out_guards = _guards.GuardsSet()
             assert out_guards is not None  # suppress mypy error
@@ -1857,9 +1868,10 @@ def export(
             for i, name in enumerate(parameter_names):
                 if torch.is_tensor(flat_args[i]):
                     node = fx_graph.placeholder(name)
-                    node.meta["val"] = fake_mode.from_tensor(
-                        flat_args[i], static_shapes=True
-                    )
+                    with func_mode:
+                        node.meta["val"] = to_fun(fake_mode.from_tensor(
+                            flat_args[i], static_shapes=True
+                        ))
                     graph_captured_input = graph_captured_input + (flat_args[i],)
                     example_inputs.append(flat_args[i])
             fx_graph.output(graph_captured_result)
@@ -1884,10 +1896,11 @@ def export(
                 check_signature_rewritable(graph)
 
         # NB: This is mostly hitting the cache; Dynamo already converted these
-        example_fake_inputs = [
-            fake_mode.from_tensor(t) if isinstance(t, torch.Tensor) else t
-            for t in example_inputs
-        ]
+        with func_mode:
+            example_fake_inputs = [
+                to_fun(fake_mode.from_tensor(t)) if isinstance(t, torch.Tensor) else t
+                for t in example_inputs
+            ]
 
         if aten_graph:
             # Running graph with interpreter is needed for propagating the stack_trace
@@ -1916,6 +1929,7 @@ def export(
             assert graph is not None
             for node in graph.graph.find_nodes(op="get_attr"):
                 if isinstance(getattr(graph, node.target), torch.Tensor):  # type: ignore[arg-type]
+                    # TODO: Do we need to rewrite here as well?
                     node.meta["val"] = fake_mode.from_tensor(
                         getattr(graph, node.target),  # type: ignore[arg-type]
                         static_shapes=True,

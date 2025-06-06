@@ -90,6 +90,10 @@ from ..pgo import (
     InferStride,
     process_automatic_dynamic,
 )
+from torch._subclasses.functional_tensor import FunctionalTensorMode
+from torch._functorch._aot_autograd.functional_utils import (
+    to_fun
+)
 from ..side_effects import SideEffects
 from ..source import (
     AttrProxySource,
@@ -2013,9 +2017,10 @@ class VariableBuilder:
         # the subgraph.
         # See NOTE [HigherOrderOperator tracing design] for more details.
 
-        example_value = wrap_to_fake_tensor_and_record(
-            value, tx=self.tx, is_tensor=True, source=source
-        )
+        with FunctionalTensorMode():
+            example_value = to_fun(wrap_to_fake_tensor_and_record(
+                value, tx=self.tx, is_tensor=True, source=source
+            ))
 
         tensor_proxy = self.tx.output.root_tracer.create_graph_input(
             re.sub(r"[^a-zA-Z0-9]+", "_", self.name),

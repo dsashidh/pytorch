@@ -95,7 +95,8 @@ class ComptimeVar:
 
         WARNING: Do NOT mutate the returned tensor.
         """
-        return self.__variable.as_proxy().node.meta["example_value"]
+        functional_tensor = self.__variable.as_proxy().node.meta["example_value"]
+        return functional_tensor.from_functional()
 
     def size(self, dim: Optional[int] = None) -> Union[int, torch.SymInt]:
         """

@@ -2602,7 +2602,7 @@ class SubgraphTracer(fx.Tracer):
             assert self.parent is not None, (
                 f"you are required to provide a source for inputs {name} example_val {example_value} on the root tracer"
             )
-
+        import pdb; pdb.set_trace()
         # Note [Export inputs must be explicitly passed in]
         # In eager, we are generally OK with adding graph inputs whenever we
         # want, because we take care of writing the bytecode that knows how

@@ -93,7 +93,10 @@ from torch.utils._triton import has_triton, has_triton_package
 from torch.utils.hooks import RemovableHandle
 
 from .graph_utils import _get_flat_args
-
+from torch._subclasses.functional_tensor import FunctionalTensorMode
+from torch._functorch._aot_autograd.functional_utils import (
+    to_fun
+)
 
 if typing.TYPE_CHECKING:
     from collections.abc import (
@@ -2765,6 +2768,11 @@ def deepcopy_to_fake_tensor(obj, fake_mode):
     with torch._subclasses.fake_tensor.FakeCopyMode(fake_mode):
         return wrap_fake_exception(lambda: copy.deepcopy(obj))
 
+def deepcopy_to_func_fake_tensor(obj, fake_mode):
+    # Used for example_value 
+    with torch._subclasses.fake_tensor.FakeCopyMode(fake_mode), FunctionalTensorMode():
+        return to_fun(wrap_fake_exception(lambda: copy.deepcopy(obj)))
+
 
 def rmse(ref, res):
     """
@@ -3194,6 +3202,7 @@ def get_fake_value(node, tx, allow_non_graph_fake=False):
     op = node.op
 
     # FX Node should always return the same fake value
+    import pdb; pdb.set_trace()
     if "example_value" in node.meta and is_fake(node.meta["example_value"]):
         return node.meta["example_value"]
 
@@ -3245,7 +3254,8 @@ def get_fake_value(node, tx, allow_non_graph_fake=False):
         )
 
     try:
-        with tx.fake_mode, enable_python_dispatcher():
+        # TODO: Add functional mode here!
+        with tx.fake_mode, enable_python_dispatcher(), FunctionalTensorMode():
             ret_val = wrap_fake_exception(
                 lambda: run_node(tx.output, node, args, kwargs, nnmodule)
             )

@@ -98,14 +98,6 @@ def upload_to_s3_artifacts(failed: bool) -> None:
             Key=f"{LOG_BUCKET_PREFIX}/{job_id}"
         )
 
-        # Put the job id into this bucket so that the conclusion can be
-        # overwritten in dynamoDB later
-        get_s3_resource().put_object(
-            Body=b"",
-            Bucket="gha-artifacts",
-            Key=f"{OVERWRITE_CONCLUSION_BUCKET_PREFIX}/{job_id}",
-        )
-
 
 def zip_and_upload_artifacts(failed: bool) -> None:
     # not thread safe but correctness of the LAST_UPDATED var doesn't really

@@ -13,7 +13,8 @@ def main() -> None:
     for command in compile_commands:
         output = command["output"]
 
-        if "flash_attention" in output:
+        if "flash-attention" in output:
+            print(f"Compiling {output} with command: {command['command']}")
             os.makedirs(os.path.dirname(output), exist_ok=True)
             res = subprocess.run(
                 command["command"]

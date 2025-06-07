@@ -1821,7 +1821,7 @@ def run_tests(
             return False
         failures.append(failure)
         if IS_CI and options.upload_artifacts_while_running:
-            zip_and_upload_artifacts(test_failed)
+            zip_and_upload_artifacts(True)
         print_to_stderr(failure.message)
         return True
 

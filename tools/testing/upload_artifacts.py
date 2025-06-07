@@ -105,7 +105,7 @@ def zip_and_upload_artifacts(failed: bool) -> None:
     # matter for this
     # Upload if a test failed or every 20 minutes
     global LAST_UPDATED
-
+    print(f"alsdkfj: {failed}")
     if failed or time.time() - LAST_UPDATED > 20 * 60:
         start = time.time()
         try:

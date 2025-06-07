@@ -1825,6 +1825,7 @@ def run_tests(
 
     def parallel_test_completion_callback(failure):
         test_failed = handle_error_messages(failure)
+        print(f"parallel {test_failed}")
         if IS_CI and options.upload_artifacts_while_running:
             zip_and_upload_artifacts(test_failed)
         if (

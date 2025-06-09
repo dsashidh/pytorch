@@ -412,7 +412,7 @@ class _WrappedCall:
                     file=sys.stderr,
                 )
                 raise e.with_traceback(None)  # noqa: B904
-            else:
+            else:                
                 raise e
 
 

@@ -775,6 +775,28 @@ class TestPatternMatcher(TestCase):
         joint_graph.joint_graph_passes(gm)
         self.assertEqual(count_calls(gm.graph), 2)
 
+        # handle negative 1 in size argument of view
+        def f(x):
+            x = aten.view.default(x, [3, 5, 7])
+            x = aten.view.default(x, [-1, 7])
+            return x
+
+        gm = make_fx(f)(x)
+        self.assertEqual(count_calls(gm.graph), 2)
+        joint_graph.joint_graph_passes(gm)
+        self.assertEqual(count_calls(gm.graph), 0)
+
+    def test_pointless_view_pair_dynamic_shapes(self):
+        def f(x):
+            s1, s2 = x.shape
+            x = aten.view.default(x, [-1])
+            x = aten.view.default(x, [s1, s2])
+            return x
+
+        x = torch.randn(15, 7, device=GPU_TYPE)
+        out = torch.compile(f, dynamic=True)(x)
+        self.assertTrue(torch.equal(x, out))
+
     def test_pointless_permute_pair(self):
         def f(x):
             x = aten.permute.default(x, [1, 0])

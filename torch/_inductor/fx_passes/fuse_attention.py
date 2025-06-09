@@ -542,6 +542,81 @@ def _sfdp_replacement_19(query, key, value, causal_mask, attn_mask, dropout_p):
     )
 
 
+def _sfdp_pattern_20(query, key, value, attn_mask):
+    query = query.permute([0, 2, 1, 3])
+    key = key.permute([0, 2, 1, 3])
+    value = value.permute([0, 2, 1, 3])
+    score = torch.matmul(query, key.permute(0, 1, 3, 2))
+    score += attn_mask
+    return score.float().softmax(dim=-1).type_as(query).matmul(value)
+
+
+def _sfdp_replacement_20(query, key, value, attn_mask):
+    counters["inductor"]["fuse_attention"] += 1
+    query = query.permute(0, 2, 1, 3)
+    key = key.permute(0, 2, 1, 3)
+    value = value.permute(0, 2, 1, 3)
+    return _scaled_dot_product_attention(
+        query,
+        key,
+        value,
+        attn_mask=attn_mask.to(dtype=query.dtype),
+        is_causal=False,
+        scale=1.0,
+    )
+
+
+def _sfdp_pattern_21(query, key, value, attn_mask):
+    query = query.permute([0, 2, 1, 3])
+    key = key.permute([0, 2, 1, 3])
+    value = value.permute([0, 2, 1, 3])
+    score = torch.matmul(query, key.permute(0, 1, 3, 2))
+    score += attn_mask
+    return score.float().softmax(dim=-1).type_as(query).matmul(value), key, value
+
+
+def _sfdp_replacement_21(query, key, value, attn_mask):
+    counters["inductor"]["fuse_attention"] += 1
+    query = query.permute(0, 2, 1, 3)
+    key = key.permute(0, 2, 1, 3)
+    value = value.permute(0, 2, 1, 3)
+    return _scaled_dot_product_attention(
+        query,
+        key,
+        value,
+        attn_mask=attn_mask.to(dtype=query.dtype),
+        is_causal=False,
+        scale=1.0,
+    ), key, value
+
+
+def _sfdp_pattern_22(query, key, value):
+    query = query.permute([0, 2, 1, 3])
+    key = key.permute([0, 2, 1, 3])
+    value = value.permute([0, 2, 1, 3])
+    score = torch.matmul(query, key.permute(0, 1, 3, 2))
+    fp32_score = score.float()
+    score = fp32_score.type_as(query)
+    viewd_score1 = score.view(score.size(0) * score.size(1), score.size(2), score.size(3))
+    viewd_score2 = viewd_score1.view(score.size(0), score.size(1), score.size(2), score.size(3))
+    return viewd_score2.float().softmax(dim=-1).type_as(query).matmul(value), key, value
+
+
+def _sfdp_replacement_22(query, key, value):
+    counters["inductor"]["fuse_attention"] += 1
+    query = query.permute(0, 2, 1, 3)
+    key = key.permute(0, 2, 1, 3)
+    value = value.permute(0, 2, 1, 3)
+    return _scaled_dot_product_attention(
+        query,
+        key,
+        value,
+        attn_mask=None,
+        is_causal=False,
+        scale=1.0,
+    ), key, value
+
+
 def _sfdp_params_check(match):
     assert all(k in match.kwargs for k in ("query", "key", "value"))
     query = match.kwargs["query"].meta["val"]
@@ -827,6 +902,27 @@ def _get_sfdp_patterns():
                 _sfdp_replacement_19,
                 [g(), g(), g(), b_bool(), b_float()],
                 d,
+                _sfdp_params_check,
+            ),
+            (
+                _sfdp_pattern_20,
+                _sfdp_replacement_20,
+                [g(), g(), g(), m_float()],
+                {},
+                _sfdp_params_check,
+            ),
+            (
+                _sfdp_pattern_21,
+                _sfdp_replacement_21,
+                [g(), g(), g(), m_float()],
+                {},
+                _sfdp_params_check,
+            ),
+            (
+                _sfdp_pattern_22,
+                _sfdp_replacement_22,
+                [g(), g(), g()],
+                {},
                 _sfdp_params_check,
             ),
         ]

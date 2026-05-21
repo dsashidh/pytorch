@@ -302,7 +302,7 @@ class TestCustomOpTesting(CustomOpTestCaseBase):
         lib.impl("foo", foo_impl, "CUDA")
         lib.impl("foo", foo_impl, "XPU")
 
-        x = torch.tensor([0, 1.0], requires_grad=True)
+        x = torch.tensor([0, 1.0], requires_grad=True, device=device)
         with self.assertRaisesRegex(
             optests.OpCheckError,
             "_test_custom_op.foo.default",
@@ -345,7 +345,7 @@ class TestCustomOpTesting(CustomOpTestCaseBase):
         lib.impl("foo", foo_impl, "XPU")
         lib.impl("foo", foo_meta, "Meta")
 
-        x = torch.tensor([0, 1.0], requires_grad=True)
+        x = torch.tensor([0, 1.0], requires_grad=True, device=device)
         with self.assertRaisesRegex(optests.OpCheckError, "Shapes .* are not equal"):
             torch.library.opcheck(op, (x,), {})
 
@@ -377,7 +377,7 @@ class TestCustomOpTesting(CustomOpTestCaseBase):
         lib.impl("foo", foo_impl, "XPU")
         lib.impl("foo", foo_meta, "Meta")
 
-        x = torch.tensor([0, 1.0])
+        x = torch.tensor([0, 1.0], device=device)
         y = x.clone()
         with self.assertRaisesRegex(
             optests.OpCheckError,
@@ -404,7 +404,7 @@ class TestCustomOpTesting(CustomOpTestCaseBase):
         lib.impl("foo", Foo.apply, "XPU")
         lib.impl("foo", lambda x: x.clone(), "Meta")
 
-        x = torch.randn([], requires_grad=True)
+        x = torch.randn([], requires_grad=True, device=device)
 
         with self.assertRaisesRegex(
             torch.testing._internal.optests.OpCheckError,
@@ -434,7 +434,7 @@ class TestCustomOpTesting(CustomOpTestCaseBase):
 
         lib.impl("foo", Foo.apply, "CompositeImplicitAutograd")
 
-        x = torch.tensor(3.14159 / 3, requires_grad=True)
+        x = torch.tensor(3.14159 / 3, requires_grad=True, device=device)
         with self.assertRaisesRegex(
             optests.OpCheckError, "eager-mode PyTorch vs AOTDispatcher"
         ):
